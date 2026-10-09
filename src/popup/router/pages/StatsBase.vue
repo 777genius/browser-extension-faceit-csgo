@@ -99,7 +99,9 @@ export default {
       statsError: false,
       isLoadingProfile: false,
       hasLoadingError: false,
-      loadingTimeoutId: null
+      loadingTimeoutId: null,
+      profileNeedsReload: !!validNickname,
+      profileLoadTimer: null
     }
   },
   computed: {
@@ -148,22 +150,26 @@ export default {
       ]
     }
   },
-  async created () {
-    // if nickname was saved
-    if (this.nickname) {
-      // Показываем состояние загрузки для сохраненного игрока
-      this.startLoading()
-      
-      // Эмулируем поиск для сохраненного никнейма
-      this.$nextTick(() => {
-        this.$refs.playerSearch?.findPlayer({ nickname: this.nickname })
-      })
+  watch: {
+    '$route.name' (route, previousRoute) {
+      if (route === 'favorites') {
+        this.cancelQueuedProfileLoad()
+        if (this.isLoadingProfile) this.profileNeedsReload = true
+        this.$refs.playerSearch?.cancelRequests()
+        this.clearLoadingState()
+      } else if (previousRoute === 'favorites' && this.profileNeedsReload) {
+        this.scheduleProfileLoad()
+      }
     }
+  },
+  created () {
+    if (this.nickname) this.scheduleProfileLoad()
 
     // Слушаем событие поиска игрока из списка избранных
     this.$root.$on('search-player', this.searchPlayerFromFavorites)
   },
   beforeDestroy () {
+    this.cancelQueuedProfileLoad()
     // Убираем слушатель при уничтожении компонента
     this.$root.$off('search-player', this.searchPlayerFromFavorites)
     
@@ -173,6 +179,22 @@ export default {
     }
   },
   methods: {
+    cancelQueuedProfileLoad () {
+      clearTimeout(this.profileLoadTimer)
+      this.profileLoadTimer = null
+    },
+    scheduleProfileLoad () {
+      this.cancelQueuedProfileLoad()
+      if (!this.nickname || this.$route.name === 'favorites') return
+      // The next event-loop turn lets PlayerSearch remount and gives an explicit
+      // favorite selection priority over resuming the previous nickname.
+      this.profileLoadTimer = setTimeout(() => {
+        this.profileLoadTimer = null
+        if (this.$route.name !== 'favorites' && this.profileNeedsReload && this.nickname) {
+          this.$refs.playerSearch?.findPlayer({ nickname: this.nickname })
+        }
+      }, 0)
+    },
     setLocalStorageNickname (val) {
       this.localStorageNickname = val
     },
@@ -181,18 +203,19 @@ export default {
       if (this.selectedGame === game) return
       this.selectedGame = game
       localStorage.setItem('selectedGame', game)
+      this.cancelQueuedProfileLoad()
+      this.profileNeedsReload = !!this.nickname
+      this.player = null
       this.fullStats = null
       this.statsError = false
       this.$refs.playerSearch?.cancelRequests()
       if (this.$route.name === 'map-stats') this.$router.replace({ name: 'full-stats' })
-      if (reload && this.nickname && this.$route.name !== 'favorites') {
-        this.startLoading()
-        // Wait for the controlled game prop to reach PlayerSearch before fetching.
-        this.$nextTick(() => this.$refs.playerSearch?.findPlayer({ nickname: this.nickname }))
-      }
+      if (reload) this.scheduleProfileLoad()
     },
     onPlayerLoading ({ nickname, game }) {
       if (game !== this.selectedGame) return
+      this.cancelQueuedProfileLoad()
+      this.profileNeedsReload = true
       this.nickname = nickname
       this.player = null
       this.fullStats = null
@@ -202,6 +225,7 @@ export default {
     onPlayerFound ({ player, fullStats, nickname, game, statsError }) {
       if (game !== this.selectedGame) return
       this.clearLoadingState()
+      this.profileNeedsReload = false
       this.player = player
       this.fullStats = fullStats
       this.nickname = nickname
@@ -215,6 +239,7 @@ export default {
       }
     },
     onProfileError () {
+      this.profileNeedsReload = false
       // При ошибке профиля показываем экран ошибки
       this.isLoadingProfile = false
       this.hasLoadingError = true
@@ -234,10 +259,12 @@ export default {
       return avatar
     },
     async searchPlayerFromFavorites (favorite) {
+      this.cancelQueuedProfileLoad()
       const nickname = typeof favorite === 'string' ? favorite : favorite.nickname
       const game = typeof favorite === 'string' ? this.selectedGame : normalizeGame(favorite.game)
       this.onGameSelected(game, false)
       this.nickname = nickname
+      this.profileNeedsReload = true
       await this.$nextTick()
       this.$refs.playerSearch?.findPlayer({ nickname })
     },
@@ -252,6 +279,8 @@ export default {
       }
     },
     resetToSearch () {
+      this.cancelQueuedProfileLoad()
+      this.profileNeedsReload = false
       this.$refs.playerSearch?.cancelRequests()
       // Сбрасываем все состояния и возвращаемся к поиску
       this.clearLoadingState()
