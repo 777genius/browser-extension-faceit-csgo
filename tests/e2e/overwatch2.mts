@@ -85,6 +85,8 @@ await context.route('https://open.faceit.com/data/v4/**', async route => {
 })
 // External telemetry/config never leaves this isolated fixture run. Game API is separately live-tested below.
 await context.route(/https:\/\/(?:.*googleapis\.com|www\.google-analytics\.com|.*sentry\.io)\//, route => route.abort())
+// Avoid an unrelated CDN font timeout delaying screenshots of the actual extension UI.
+await context.route('**/*', route => route.request().resourceType() === 'font' ? route.abort() : route.fallback())
 const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker', { timeout: 20000 })
 const extensionId = new URL(worker.url()).host
 const page = await context.newPage()
@@ -100,9 +102,9 @@ async function textContains(selector: string, value: string) {
   await eventually(async () => assert((await page.locator(selector).innerText({ timeout: 1000 })).includes(value), `${selector} must contain ${value}`))
 }
 async function seed(game: Game, nickname = 'kevsteer') {
-  await page.goto(popup)
+  await page.goto(popup, { waitUntil: 'domcontentloaded' })
   await page.evaluate(({ game, nickname }) => { localStorage.clear(); localStorage.setItem('selectedGame', game); localStorage.setItem('nickname', nickname) }, { game, nickname })
-  await page.reload()
+  await page.reload({ waitUntil: 'domcontentloaded' })
 }
 async function selectGame(game: Game) {
   await page.locator('.selected-game').click()
@@ -161,7 +163,7 @@ try {
     await page.locator('.favorite-player-card .view-btn').click()
     await textContains('.ow2-elo', '2892')
     await textContains('.selected-game', 'Overwatch 2')
-    await page.reload()
+    await page.reload({ waitUntil: 'domcontentloaded' })
     await textContains('.ow2-elo', '2892')
     assert.equal(await page.evaluate(() => localStorage.getItem('selectedGame')), 'ow2')
   })
@@ -243,7 +245,7 @@ try {
     const remaining = await page.evaluate(() => JSON.parse(localStorage.getItem('favoritePlayers') || '[]') as Array<{ game: string }>)
     assert.deepEqual(remaining.map(favorite => favorite.game), ['cs2'])
     await page.evaluate(player => { localStorage.setItem('favoritePlayers', JSON.stringify([{ player_id: player.player_id, nickname: player.nickname, faceit_elo: 2653, skill_level: 10 }])) }, snapshots[0].player)
-    await page.reload()
+    await page.reload({ waitUntil: 'domcontentloaded' })
     await page.locator('.favorite-player-card .view-btn').click()
     await textContains('.selected-game', 'CS:GO')
     await textContains('body', '2653')
