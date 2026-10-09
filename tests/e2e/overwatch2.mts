@@ -40,6 +40,7 @@ function holdNext(endpoint: 'stats' | 'history', game: Game) {
   hold = { endpoint, game, waiting: wait.promise, release: wait.resolve, started: start.promise, notify: start.resolve }
   return hold
 }
+function releaseHeldRequest() { hold?.release() }
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 }
@@ -138,7 +139,11 @@ try {
     await textContains('.match-history', snapshots[0].ow2!.history.items[0].competition_name)
     await eventually(async () => assert.equal(await page.locator('.match-card').count(), 10))
     assert(apiCalls.some(url => url.includes('history?game=ow2')), 'History must request ow2')
+    const nextPage = page.waitForResponse(response => response.url().includes('history?game=ow2&offset=10') && response.status() === 200)
     await page.locator('.load-more-btn').click()
+    await nextPage
+    await eventually(async () => assert.equal(await page.locator('.match-history .loading-state').count(), 0))
+    assert.equal(await page.locator('.match-card').count(), 10)
     await eventually(async () => assert.equal(await page.locator('.load-more-btn').count(), 0))
     assert(apiCalls.some(url => url.includes('history?game=ow2&offset=10')), 'Pagination must advance by returned match count')
     await page.screenshot({ path: path.join(evidence, 'ow2-history.png'), fullPage: true })
@@ -275,7 +280,7 @@ try {
     assert.equal(await page.locator('iframe[src*="clash.gg"], img[src*="fFlMFLd"]').count(), 0)
   })
 } finally {
-  hold?.release()
+  releaseHeldRequest()
   await writeFile(path.join(evidence, 'results.json'), JSON.stringify({ extensionId, cases: results, apiCalls, pageErrors, unexpected }, null, 2) + '\n')
   await context.close()
 }
