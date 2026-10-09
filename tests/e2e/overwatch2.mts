@@ -116,9 +116,12 @@ async function selectGame(game: Game) {
   await page.locator('.selected-game').click()
   await page.locator(`.dropdown-item[data-game="${game}"]`).click()
 }
+async function screenshot(name: string) {
+  if (process.env.SCREENSHOTS === '1') await page.screenshot({ path: path.join(evidence, name), fullPage: true })
+}
 async function caseRun(name: string, run: () => Promise<void>) {
   try { await run(); results.push({ name, status: 'passed' }); console.log(`PASS ${name}`) }
-  catch (error) { const message = error instanceof Error ? error.stack || error.message : String(error); results.push({ name, status: 'failed', error: message }); console.error(`FAIL ${name}: ${message}`); await page.screenshot({ path: path.join(evidence, `failure-${results.length}.png`), fullPage: true }).catch(() => {}) }
+  catch (error) { const message = error instanceof Error ? error.stack || error.message : String(error); results.push({ name, status: 'failed', error: message }); console.error(`FAIL ${name}: ${message}`); await screenshot(`failure-${results.length}.png`).catch(() => {}) }
 }
 try {
   await caseRun('OW2 profile, exact FACEIT metrics, full stats, map route and local icons', async () => {
@@ -127,8 +130,8 @@ try {
     await textContains('.selected-game', 'Overwatch 2')
     const images = await page.locator('.overwatch-stats img[src*="skill_level_"], .selected-game img').evaluateAll(elements => elements.map(el => { const img = el as HTMLImageElement; return { src: img.src, loaded: img.complete && img.naturalWidth > 0 } }))
     assert(images.length >= 2 && images.every(img => img.loaded && !img.src.includes('skill_level_0_')), 'OW2 game and valid level assets must load')
-    await page.screenshot({ path: path.join(evidence, 'ow2-overview.png'), fullPage: true })
     await writeFile(path.join(evidence, 'navigation-dom.html'), await page.locator('.tabs-wrapper').innerHTML())
+    await screenshot('ow2-overview.png')
     await page.locator('.tab-link').nth(1).click()
     await textContains('.stat-row[data-stat="Matches"]', '792')
     await textContains('.stat-row[data-stat="Average Damage Dealt"]', '10821')
@@ -139,7 +142,7 @@ try {
     await page.locator('.ow2-map-list a').first().click()
     await textContains('.overwatch-stats', map.label)
     await textContains('.stat-row[data-stat="Matches"]', map.stats.Matches)
-    await page.screenshot({ path: path.join(evidence, 'ow2-map.png'), fullPage: true })
+    await screenshot('ow2-map.png')
   })
   await caseRun('OW2 match history and real competition/room links', async () => {
     await seed('ow2')
@@ -155,7 +158,7 @@ try {
     assert.equal(await page.locator('.match-card').count(), 10)
     await eventually(async () => assert.equal(await page.locator('.load-more-btn').count(), 0))
     assert(apiCalls.some(url => url.includes('history?game=ow2&offset=10')), 'Pagination must advance by returned match count')
-    await page.screenshot({ path: path.join(evidence, 'ow2-history.png'), fullPage: true })
+    await screenshot('ow2-history.png')
   })
   await caseRun('Game switch, persisted game and favorites use the selected game Elo', async () => {
     await seed('ow2')
@@ -280,7 +283,7 @@ try {
       await page.locator('.ow2-stats-table').waitFor({ timeout: 30000 })
       await page.locator('.tab-link').nth(2).click()
       await page.locator('.match-card').first().waitFor({ timeout: 30000 })
-      await page.screenshot({ path: path.join(evidence, 'ow2-live.png'), fullPage: true })
+      await screenshot('ow2-live.png')
     })
   }
   await caseRun('No unhandled page errors, unexpected API routes or visible advertisements', async () => {
