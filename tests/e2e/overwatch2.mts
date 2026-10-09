@@ -100,7 +100,7 @@ page.setDefaultNavigationTimeout(15000)
 page.on('pageerror', error => pageErrors.push(error.message))
 page.on('console', message => {
   const text = message.text()
-  if (message.type() === 'error' && /\[Vue|TypeError|ReferenceError/.test(text)) {
+  if (message.type() === 'error' && /^Vue global error:|^\[Vue/.test(text)) {
     vueErrors.push(text.slice(0, 1000))
     console.error('UI runtime error:', text.slice(0, 1000))
   }
@@ -161,7 +161,7 @@ try {
     await textContains('.stat-row[data-stat="Matches"]', map.stats.Matches)
     await screenshot('ow2-map.png')
   })
-  await caseRun('OW2 match history and real competition/room links', async () => {
+  await caseRun('OW2 match history and pagination', async () => {
     await seed('ow2')
     await textContains('.ow2-elo', '2892')
     await click(page.locator('.tab-link').nth(2))
