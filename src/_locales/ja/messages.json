@@ -1,11 +1,11 @@
 {
     "extensionName": {
-        "message": "Faceit eloスタティスティクス (CS:GO, CS 2)",
+        "message": "Faceit eloスタティスティクス (CS:GO, CS2)",
         "description": "拡張機能の名前。"
     },
 
     "extensionDescription": {
-        "message": "CS:GOとCS 2のFaceitでの統計を簡単に表示できます。拡張されたプレイヤー統計、マップ、マッチが利用可能です。",
+        "message": "CS:GOとCS2のFaceitでの統計を簡単に表示できます。拡張されたプレイヤー統計、マップ、マッチが利用可能です。",
         "description": "拡張機能の説明。"
     },
 

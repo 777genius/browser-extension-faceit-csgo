@@ -71,10 +71,26 @@ class RemoteConfigService {
             rate_limit_requests_per_minute: 30,
 
             // Рекламные баннеры
+            ad_enabled: true,
             ad_img_src: '',
-            ad_img_height: '60',
-            ad_img_width: '300',
+            ad_img_height: '60px',
+            ad_img_width: '300px',
             ad_img_href: '',
+            ad_type: 'iframe',
+            ad_iframe_src: 'https://clash.gg/embed-ad/Fort-Knox?initialWidth=340&initialHeight=100&redirect=https%3A%2F%2Ftrk.clash.gg%2Fclick%3Fo%3D2%26a%3D773%26c%3D161&winChance=0.99',
+            ad_iframe_width: 340,
+            ad_iframe_height: 100,
+
+            // Рекламный баннер 2 (нижний)
+            ad_enabled_2: true,
+            ad_img_src_2: '',
+            ad_img_height_2: '60px',
+            ad_img_width_2: '300px',
+            ad_img_href_2: '',
+            ad_type_2: 'iframe',
+            ad_iframe_src_2: 'https://clash.gg/embed-ad/Fort-Knox?initialWidth=340&initialHeight=100&redirect=https%3A%2F%2Ftrk.clash.gg%2Fclick%3Fo%3D2%26a%3D773%26c%3D161&winChance=0.99',
+            ad_iframe_width_2: 340,
+            ad_iframe_height_2: 100,
 
             // Текстовые настройки
             welcome_message: 'Добро пожаловать в Faceit Stats!',
@@ -206,10 +222,13 @@ class RemoteConfigService {
 
     getUIConfig() {
         return {
+            adEnabled: this.getBoolean('ad_enabled', false),
+            adType: this.getString('ad_type', 'image'),
             adImageSrc: this.getString('ad_img_src', ''),
             adImageHeight: this.getNumber('ad_img_height', 60),
             adImageWidth: this.getNumber('ad_img_width', 300),
-            adImageHref: this.getString('ad_img_href', '')
+            adImageHref: this.getString('ad_img_href', ''),
+            adIframeSrc: this.getString('ad_iframe_src', '')
         }
     }
 

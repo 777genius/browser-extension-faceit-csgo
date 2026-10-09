@@ -97,6 +97,10 @@ const config = {
                     const jsonContent = JSON.parse(content)
                     jsonContent.version = version
 
+                    jsonContent['content_security_policy'] = {
+                        extension_pages: "script-src 'self'; object-src 'self'; frame-src 'self' https://clash.gg"
+                    }
+
                     if (process.env.NODE_ENV === 'development') {
                         // Добавляем префикс [DEV] к названию расширения если его еще нет
                         if (!jsonContent.name.includes('[DEV]')) {
@@ -104,7 +108,7 @@ const config = {
                         }
 
                         jsonContent['content_security_policy'] = {
-                                extension_pages: "script-src 'self'; object-src 'self'; connect-src 'self' https://open.faceit.com https://o4509418472013824.ingest.de.sentry.io https://www.google-analytics.com https://firebaseinstallations.googleapis.com https://firebaseremoteconfig.googleapis.com"
+                                extension_pages: "script-src 'self'; object-src 'self'; frame-src 'self' https://clash.gg; connect-src 'self' https://open.faceit.com https://o4509418472013824.ingest.de.sentry.io https://www.google-analytics.com https://firebaseinstallations.googleapis.com https://firebaseremoteconfig.googleapis.com"
                             }
                             // Add permissions needed for hot reload
                         if (!jsonContent.permissions.includes('tabs')) {

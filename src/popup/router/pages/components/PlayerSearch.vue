@@ -42,6 +42,7 @@
           </span>
 
           <img
+            v-if="getPlayerSearchLvl(playerSearch) !== null"
             :src="$browser.runtime.getURL(`assets/skill_level_${getPlayerSearchLvl(playerSearch)}_svg.svg`)"
             alt="lvl icon"
             class="level-icon"
@@ -289,7 +290,9 @@ export default {
     },
 
     getPlayerSearchLvl (playerSearch) {
-      return playerSearch.games.find(i => i.name === this.selectedGame)?.skill_level || 1
+      const games = Array.isArray(playerSearch.games) ? playerSearch.games : []
+      const level = Number(games.find(i => i.name === this.selectedGame)?.skill_level)
+      return Number.isInteger(level) && level >= 1 && level <= 10 ? level : null
     },
 
     avatarOrDefault (avatar) {

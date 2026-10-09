@@ -46,6 +46,9 @@
       />
 
     </div>
+
+    <!-- Рекламный баннер внизу -->
+    <AdvertisementBanner suffix="_2" />
   </div>
 </template>
 

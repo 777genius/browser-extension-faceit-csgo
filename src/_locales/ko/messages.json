@@ -1,11 +1,11 @@
 {
     "extensionName": {
-        "message": "Faceit elo 통계 (CS:GO, CS 2)",
+        "message": "Faceit elo 통계 (CS:GO, CS2)",
         "description": "확장 프로그램의 이름입니다."
     },
 
     "extensionDescription": {
-        "message": "CS:GO와 CS 2를 위한 Faceit 통계를 쉽게 확인하세요. 확장된 플레이어 통계, 맵, 경기를 이용할 수 있습니다.",
+        "message": "CS:GO와 CS2를 위한 Faceit 통계를 쉽게 확인하세요. 확장된 플레이어 통계, 맵, 경기를 이용할 수 있습니다.",
         "description": "확장 프로그램의 설명입니다."
     },
 

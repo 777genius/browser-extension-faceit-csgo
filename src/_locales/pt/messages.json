@@ -1,11 +1,11 @@
 {
     "extensionName": {
-        "message": "Estatísticas Faceit elo (CS:GO, CS 2)",
+        "message": "Estatísticas Faceit elo (CS:GO, CS2)",
         "description": "Nome da extensão."
     },
 
     "extensionDescription": {
-        "message": "Visualize facilmente suas estatísticas no Faceit para CS:GO e CS 2. Estatísticas estendidas do jogador, seus mapas, partidas estão disponíveis.",
+        "message": "Visualize facilmente suas estatísticas no Faceit para CS:GO e CS2. Estatísticas estendidas do jogador, seus mapas, partidas estão disponíveis.",
         "description": "Descrição da extensão."
     },
 

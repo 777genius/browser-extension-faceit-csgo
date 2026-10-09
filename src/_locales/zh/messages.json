@@ -1,11 +1,11 @@
 {
     "extensionName": {
-        "message": "Faceit等级统计 (CS:GO, CS 2)",
+        "message": "Faceit等级统计 (CS:GO, CS2)",
         "description": "扩展名称。"
     },
 
     "extensionDescription": {
-        "message": "轻松查看您在Faceit上的CS:GO和CS 2统计数据。提供扩展的玩家统计、地图、比赛信息。",
+        "message": "轻松查看您在Faceit上的CS:GO和CS2统计数据。提供扩展的玩家统计、地图、比赛信息。",
         "description": "扩展描述。"
     },
 
