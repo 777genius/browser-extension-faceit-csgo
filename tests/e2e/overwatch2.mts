@@ -86,10 +86,16 @@ await context.route('https://open.faceit.com/data/v4/**', async route => {
 // External telemetry/config never leaves this isolated fixture run. Game API is separately live-tested below.
 await context.route(/https:\/\/(?:.*googleapis\.com|www\.google-analytics\.com|.*sentry\.io)\//, route => route.abort())
 // Avoid an unrelated CDN font timeout delaying screenshots of the actual extension UI.
-await context.route('**/*', route => route.request().resourceType() === 'font' ? route.abort() : route.fallback())
+await context.route('**/*', route => {
+  const request = route.request()
+  const externalStyle = request.resourceType() === 'stylesheet' && request.url().startsWith('https://')
+  return request.resourceType() === 'font' || externalStyle ? route.abort() : route.fallback()
+})
 const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker', { timeout: 20000 })
 const extensionId = new URL(worker.url()).host
 const page = await context.newPage()
+page.setDefaultTimeout(8000)
+page.setDefaultNavigationTimeout(15000)
 page.on('pageerror', error => pageErrors.push(error.message))
 const popup = `chrome-extension://${extensionId}/popup/popup.html`
 async function eventually(check: () => Promise<void>, timeout = 12000) {
@@ -122,7 +128,8 @@ try {
     const images = await page.locator('.overwatch-stats img[src*="skill_level_"], .selected-game img').evaluateAll(elements => elements.map(el => { const img = el as HTMLImageElement; return { src: img.src, loaded: img.complete && img.naturalWidth > 0 } }))
     assert(images.length >= 2 && images.every(img => img.loaded && !img.src.includes('skill_level_0_')), 'OW2 game and valid level assets must load')
     await page.screenshot({ path: path.join(evidence, 'ow2-overview.png'), fullPage: true })
-    await page.locator('a.tab-link[href$="/full-stats"]').click()
+    await writeFile(path.join(evidence, 'navigation-dom.html'), await page.locator('.tabs-wrapper').innerHTML())
+    await page.locator('.tab-link').nth(1).click()
     await textContains('.stat-row[data-stat="Matches"]', '792')
     await textContains('.stat-row[data-stat="Average Damage Dealt"]', '10821')
     await textContains('.stat-row[data-stat="Average Healing Done"]', '135.51')
@@ -137,7 +144,7 @@ try {
   await caseRun('OW2 match history and real competition/room links', async () => {
     await seed('ow2')
     await textContains('.ow2-elo', '2892')
-    await page.locator('a.tab-link[href$="/match-history"]').click()
+    await page.locator('.tab-link').nth(2).click()
     await textContains('.match-history', snapshots[0].ow2!.history.items[0].competition_name)
     await eventually(async () => assert.equal(await page.locator('.match-card').count(), 10))
     assert(apiCalls.some(url => url.includes('history?game=ow2')), 'History must request ow2')
@@ -172,7 +179,7 @@ try {
     await textContains('.ow2-elo', '625')
     await page.locator('.ow2-empty').waitFor()
     assert.equal(await page.locator('.ow2-stats-error').count(), 0)
-    await page.locator('a.tab-link[href$="/match-history"]').click()
+    await page.locator('.tab-link').nth(2).click()
     await page.locator('.empty-matches').waitFor()
     assert.equal(await page.locator('.match-card').count(), 0)
   })
@@ -228,7 +235,7 @@ try {
     await selectGame('cs2')
     await page.locator('.back-btn').click()
     await textContains('body', '2310')
-    await page.locator('a.tab-link[href$="/full-stats"]').click()
+    await page.locator('.tab-link').nth(1).click()
     await textContains('body', snapshots[0].cs2!.stats!.lifetime.Matches)
   })
   await caseRun('Same player favorites are independent per game and legacy entries restore CS:GO', async () => {
@@ -254,7 +261,7 @@ try {
     await seed('ow2')
     await textContains('.ow2-elo', '2892')
     const pending = holdNext('history', 'ow2')
-    await page.locator('a.tab-link[href$="/match-history"]').click()
+    await page.locator('.tab-link').nth(2).click()
     await Promise.race([pending.started, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('History request was not held')), 10000))])
     await selectGame('cs2')
     await textContains('.match-history', snapshots[0].cs2!.history.items[0].competition_name)
@@ -269,9 +276,9 @@ try {
       await page.locator('.ow2-elo').waitFor({ timeout: 30000 })
       const elo = await page.locator('.ow2-elo').innerText()
       assert(/\d{3,}/.test(elo))
-      await page.locator('a.tab-link[href$="/full-stats"]').click()
+      await page.locator('.tab-link').nth(1).click()
       await page.locator('.ow2-stats-table').waitFor({ timeout: 30000 })
-      await page.locator('a.tab-link[href$="/match-history"]').click()
+      await page.locator('.tab-link').nth(2).click()
       await page.locator('.match-card').first().waitFor({ timeout: 30000 })
       await page.screenshot({ path: path.join(evidence, 'ow2-live.png'), fullPage: true })
     })
