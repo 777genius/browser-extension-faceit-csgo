@@ -1,3 +1,4 @@
+import { getGameProfile } from '../utils/gamePolicy.js'
 import { ref, reactive } from 'vue'
 import { faceitApi } from '../services/faceitApi.js'
 import { logWarning, logCriticalError, logUserAction } from '../services/sentry.js'
@@ -166,7 +167,7 @@ export function usePlayer() {
      */
     function getGameStats(game = 'csgo') {
         if (!player.value || !player.value.games) return null
-        return player.value.games[game] || player.value.games.csgo
+        return getGameProfile(player.value, game)
     }
 
     return {

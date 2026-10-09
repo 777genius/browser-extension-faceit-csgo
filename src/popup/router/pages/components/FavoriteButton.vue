@@ -12,9 +12,11 @@
 </template>
 
 <script>
+import { getGameProfile, favoriteKey } from '../../../utils/gamePolicy.js'
 export default {
   name: 'FavoriteButton',
   props: {
+    selectedGame: { type: String, default: 'csgo' },
     player: {
       type: Object,
       required: true
@@ -27,10 +29,11 @@ export default {
   },
   computed: {
     isInFavorites () {
-      return this.favoritesList.some(fav => fav.player_id === this.player.player_id)
+      return this.favoritesList.some(fav => favoriteKey(fav) === favoriteKey({ player_id: this.player.player_id, game: this.selectedGame }))
     }
   },
   watch: {
+    selectedGame () { this.loadFavorites() },
     player: {
       handler () {
         this.loadFavorites()
@@ -57,13 +60,15 @@ export default {
       }
     },
     addToFavorites () {
+      const gameProfile = getGameProfile(this.player, this.selectedGame) || {}
       const favoritePlayer = {
         player_id: this.player.player_id,
+        game: this.selectedGame,
         nickname: this.player.nickname,
         avatar: this.player.avatar,
         country: this.player.country,
-        skill_level: this.player.games?.csgo?.skill_level,
-        faceit_elo: this.player.games?.csgo?.faceit_elo,
+        skill_level: gameProfile.skill_level,
+        faceit_elo: gameProfile.faceit_elo,
         faceit_url: this.player.faceit_url,
         added_at: Date.now()
       }
@@ -74,8 +79,8 @@ export default {
       this.$analytics.trackEvent('player_added_to_favorites', {
         player_id: this.player.player_id,
         nickname: this.player.nickname,
-        skill_level: this.player.games?.csgo?.skill_level || 'unknown',
-        elo: this.player.games?.csgo?.faceit_elo || 0,
+        skill_level: getGameProfile(this.player, this.selectedGame)?.skill_level || 'unknown',
+        elo: getGameProfile(this.player, this.selectedGame)?.faceit_elo || 0,
         total_favorites: this.favoritesList.length
       })
 
@@ -88,14 +93,14 @@ export default {
     },
     removeFromFavorites () {
       const oldLength = this.favoritesList.length
-      this.favoritesList = this.favoritesList.filter(fav => fav.player_id !== this.player.player_id)
+      this.favoritesList = this.favoritesList.filter(fav => favoriteKey(fav) !== favoriteKey({ player_id: this.player.player_id, game: this.selectedGame }))
       this.saveFavorites()
 
       this.$analytics.trackEvent('player_removed_from_favorites', {
         player_id: this.player.player_id,
         nickname: this.player.nickname,
-        skill_level: this.player.games?.csgo?.skill_level || 'unknown',
-        elo: this.player.games?.csgo?.faceit_elo || 0,
+        skill_level: getGameProfile(this.player, this.selectedGame)?.skill_level || 'unknown',
+        elo: getGameProfile(this.player, this.selectedGame)?.faceit_elo || 0,
         total_favorites: this.favoritesList.length,
         removed_count: oldLength - this.favoritesList.length
       })

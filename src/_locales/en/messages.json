@@ -408,5 +408,77 @@
 
     "gameMode": {
         "message": "Game Mode"
+    },
+
+    "ow2Source": {
+        "message": "FACEIT Overwatch 2 statistics. FACEIT Elo is separate from Blizzard competitive rank."
+    },
+
+    "ow2NoGame": {
+        "message": "This player has no Overwatch 2 profile on FACEIT."
+    },
+
+    "ow2NoStats": {
+        "message": "No FACEIT Overwatch 2 statistics yet. Play matches on FACEIT to see them here."
+    },
+
+    "ow2StatsError": {
+        "message": "Could not load FACEIT statistics. Check your connection and retry."
+    },
+
+    "ow2NoMap": {
+        "message": "No statistics for this map and mode."
+    },
+
+    "ow2NoMaps": {
+        "message": "No map statistics yet."
+    },
+
+    "ow2Maps": {
+        "message": "Maps"
+    },
+
+    "ow2Region": {
+        "message": "Region"
+    },
+
+    "ow2Unranked": {
+        "message": "Unranked"
+    },
+
+    "ow2Unavailable": {
+        "message": "Unavailable"
+    },
+
+    "ow2AverageKD": {
+        "message": "Average eliminations/deaths ratio"
+    },
+
+    "ow2Eliminations": {
+        "message": "Eliminations"
+    },
+
+    "ow2AverageEliminations": {
+        "message": "Average eliminations"
+    },
+
+    "ow2Damage": {
+        "message": "Average damage dealt"
+    },
+
+    "ow2Healing": {
+        "message": "Average healing done"
+    },
+
+    "ow2Mitigation": {
+        "message": "Average damage mitigated"
+    },
+
+    "ow2FinalBlows": {
+        "message": "Average final blows"
+    },
+
+    "ow2MatchesWithStats": {
+        "message": "Matches with detailed statistics"
     }
 }

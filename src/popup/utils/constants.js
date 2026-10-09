@@ -11,7 +11,8 @@ export const FACEIT_API = {
 // Game constants
 export const GAMES = {
   CSGO: 'csgo',
-  CS2: 'cs2'
+  CS2: 'cs2',
+  OW2: 'ow2'
 }
 
 // API Limits

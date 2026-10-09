@@ -1,0 +1,48 @@
+{
+  "player": {
+    "player_id": "e7432f49-f98c-4be1-bcd8-127557b4c2b7",
+    "nickname": "Kev01Win",
+    "avatar": "",
+    "country": "de",
+    "cover_image": "",
+    "platforms": null,
+    "games": {
+      "ow2": {
+        "region": "EMEA",
+        "game_player_id": "1153971178",
+        "skill_level": 2,
+        "faceit_elo": 625,
+        "game_player_name": "DeahtRe",
+        "skill_level_label": "",
+        "regions": {},
+        "game_profile_id": ""
+      }
+    },
+    "settings": {
+      "language": "de"
+    },
+    "friends_ids": [],
+    "new_steam_id": "",
+    "steam_id_64": "",
+    "steam_nickname": "",
+    "memberships": [
+      "free"
+    ],
+    "faceit_url": "https://www.faceit.com/{lang}/players/Kev01Win",
+    "membership_type": "",
+    "cover_featured_image": "",
+    "infractions": {},
+    "verified": false,
+    "activated_at": "2026-08-21T23:23:21.248Z"
+  },
+  "ow2": {
+    "stats": null,
+    "history": {
+      "items": [],
+      "start": 0,
+      "end": 10,
+      "from": 0,
+      "to": 1791559083
+    }
+  }
+}

@@ -20,7 +20,7 @@
     >
       <FavoritePlayerCard
         v-for="player in favoritesList"
-        :key="player.player_id"
+        :key="favoriteKey(player)"
         :player="player"
         @view-stats="viewPlayerStats"
         @remove-favorite="removeFromFavorites"
@@ -57,6 +57,7 @@
 </template>
 
 <script>
+import { favoriteKey } from '../../utils/gamePolicy.js'
 import FavoritePlayerCard from './components/FavoritePlayerCard.vue'
 
 export default {
@@ -79,6 +80,7 @@ export default {
     })
   },
   methods: {
+    favoriteKey,
     loadFavorites () {
       const stored = localStorage.getItem('favoritePlayers')
       this.favoritesList = stored ? JSON.parse(stored) : []
@@ -91,9 +93,10 @@ export default {
       localStorage.setItem('favoritePlayers', JSON.stringify(this.favoritesList))
     },
 
-    viewPlayerStats (nickname) {
+    async viewPlayerStats (favorite) {
+      const nickname = favorite.nickname
       // Отслеживаем выбор игрока из избранных
-      const selectedPlayer = this.favoritesList.find(p => p.nickname === nickname)
+      const selectedPlayer = favorite
       this.$analytics.trackEvent('favorite_player_selected', {
         player_id: selectedPlayer?.player_id || 'unknown',
         nickname: nickname,
@@ -102,24 +105,19 @@ export default {
         total_favorites: this.favoritesList.length
       })
 
-      // Переходим на главную страницу и инициируем поиск
-      this.$router.push({ name: 'index' })
-
-      // Передаем никнейм родительскому компоненту для поиска
-      this.$nextTick(() => {
-        // Используем событие для передачи никнейма в StatsBase
-        this.$root.$emit('search-player', nickname)
-      })
+      await this.$router.push({ name: 'index' })
+      await this.$nextTick()
+      this.$root.$emit('search-player', favorite)
     },
 
-    removeFromFavorites (playerId) {
-      const removedPlayer = this.favoritesList.find(p => p.player_id === playerId)
-      this.favoritesList = this.favoritesList.filter(player => player.player_id !== playerId)
+    removeFromFavorites (key) {
+      const removedPlayer = this.favoritesList.find(p => favoriteKey(p) === key)
+      this.favoritesList = this.favoritesList.filter(player => favoriteKey(player) !== key)
       this.saveFavorites()
 
       // Отслеживаем удаление из избранного на странице избранных
       this.$analytics.trackEvent('player_removed_from_favorites', {
-        player_id: playerId,
+        player_id: removedPlayer?.player_id,
         nickname: removedPlayer?.nickname || 'unknown',
         skill_level: removedPlayer?.skill_level || 'unknown',
         elo: removedPlayer?.faceit_elo || 0,

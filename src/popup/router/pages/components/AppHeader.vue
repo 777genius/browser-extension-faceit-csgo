@@ -2,7 +2,7 @@
   <div class="app-header">
     <div class="brand-chip">Faceit Elo</div>
     <!-- Селектор игры -->
-    <GameSelector @game-selected="$emit('game-selected', $event)" />
+    <GameSelector :selected-game="selectedGame" @game-selected="$emit('game-selected', $event)" />
 
     <!-- Кнопки справа -->
     <div class="right-buttons">
@@ -22,6 +22,7 @@ import SupportButton from './SupportButton.vue'
 
 export default {
   name: 'AppHeader',
+  props: { selectedGame: { type: String, default: 'csgo' } },
   components: {
     GameSelector,
     FavoritesListButton,

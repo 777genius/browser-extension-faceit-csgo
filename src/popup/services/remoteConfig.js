@@ -71,7 +71,7 @@ class RemoteConfigService {
             rate_limit_requests_per_minute: 30,
 
             // Рекламные баннеры
-            ad_enabled: true,
+            ad_enabled: false,
             ad_img_src: '',
             ad_img_height: '60px',
             ad_img_width: '300px',
@@ -82,7 +82,7 @@ class RemoteConfigService {
             ad_iframe_height: 100,
 
             // Рекламный баннер 2 (нижний)
-            ad_enabled_2: true,
+            ad_enabled_2: false,
             ad_img_src_2: '',
             ad_img_height_2: '60px',
             ad_img_width_2: '300px',

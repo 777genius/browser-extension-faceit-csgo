@@ -47,6 +47,7 @@
             alt="lvl icon"
             class="level-icon"
           >
+          <span v-else-if="selectedGame === 'ow2'" class="unranked-level">{{ $browser.i18n.getMessage('ow2Unranked') || 'Unranked' }}</span>
         </div>
       </template>
     </cool-select>
@@ -56,6 +57,7 @@
 <script>
 import { CoolSelect } from 'vue-cool-select'
 import { faceitApi } from '../../../services/faceitApi.js'
+import { validSkillLevel } from '../../../utils/gamePolicy.js'
 import { logWarning, logUserAction, logCriticalError } from '../../../services/sentry.js'
 
 export default {
@@ -79,6 +81,8 @@ export default {
       players: [],
       loading: false,
       searchTimeoutId: null,
+      profileRequestId: 0,
+      searchRequestId: 0,
       searchLettersLimit: 2,
       noData: false,
       defaultAvatar: 'https://cdn-frontend.faceit.com/web/54-1542827848/static/media/avatar_default_user_300x300.8befe042.jpg'
@@ -86,6 +90,7 @@ export default {
   },
   watch: {
     selectedGame () {
+      this.cancelRequests()
       // При смене игры очищаем результаты поиска
       this.players = []
       this.noData = false
@@ -94,205 +99,96 @@ export default {
       this.nickname = newNickname
     }
   },
+  beforeDestroy () {
+    this.cancelRequests()
+  },
   methods: {
-    async findPlayer ({ nickname = this.nickname } = {}) {
-      this.nickname = nickname
-
-      if (this.nickname.length < 3) {
-        this.$browser.notifications.create({
-          type: 'basic',
-          iconUrl: this.$browser.runtime.getURL('icons/page-48.png'),
-          title: 'Nickname must be at least 2 characters.',
-          message: ''
-        })
-        return
-      }
-
-      // Отслеживаем начало поиска игрока
-      this.$analytics.trackEvent('player_search_started', {
-        nickname: this.nickname,
-        search_length: this.nickname.length,
-        selected_game: this.selectedGame,
-        is_url: this.nickname.includes('faceit.com')
-      })
-
-      // parse url
-      if (this.nickname.includes('faceit.com')) {
-        this.nickname = this.nickname.match(/players\/(.*)/)[1]
-        // remove all after nickname
-        this.nickname = this.nickname.split('/')[0]
-        
-        logUserAction('parse_faceit_url', { 
-          originalInput: nickname,
-          parsedNickname: this.nickname 
-        })
-      }
-
-      this.loading = true
-      const searchStartTime = performance.now()
-
-      try {
-        const player = await faceitApi.getPlayer(this.nickname, this.selectedGame)
-
-        // Получаем статистику игрока
-        let fullStats = null
-        if (player) {
-          try {
-            fullStats = await faceitApi.getPlayerStats(player.player_id, this.selectedGame)
-          } catch (e) {
-            if (e.message.includes('404')) {
-              logWarning('Player stats not found', {
-                player_id: player.player_id,
-                nickname: this.nickname,
-                selectedGame: this.selectedGame
-              })
-              
-              this.$browser.notifications.create({
-                'type': 'basic',
-                'iconUrl': this.$browser.runtime.getURL('icons/icon_48.png'),
-                'title': 'Error from server.',
-                'message': 'Player stats not found'
-              })
-            } else {
-              // Неожиданная ошибка при загрузке статистики
-              logCriticalError(e, {
-                context: 'player_stats_loading',
-                player_id: player.player_id,
-                nickname: this.nickname,
-                selectedGame: this.selectedGame
-              })
-            }
-          }
-        }
-
-        // Отслеживаем успешный поиск игрока
-        const searchTime = performance.now() - searchStartTime
-        this.$analytics.trackEvent('player_search_success', {
-          nickname: this.nickname,
-          player_id: player?.player_id || 'unknown',
-          skill_level: player?.games?.[this.selectedGame]?.skill_level || 'unknown',
-          elo: player?.games?.[this.selectedGame]?.faceit_elo || 0,
-          has_stats: !!fullStats,
-          search_time: Math.round(searchTime)
-        })
-        
-        this.$analytics.trackTiming('api_response_time', Math.round(searchTime))
-
-        logUserAction('player_found_successfully', {
-          nickname: this.nickname,
-          player_id: player?.player_id,
-          hasStats: !!fullStats
-        })
-
-        this.$emit('player-found', { player, fullStats, nickname: this.nickname })
-      } catch (e) {
-        // Отслеживаем неудачный поиск игрока
-        const searchTime = performance.now() - searchStartTime
-        this.$analytics.trackEvent('player_search_failed', {
-          nickname: this.nickname,
-          error_type: e.message.includes('404') ? 'player_not_found' : 'api_error',
-          error_message: e.message,
-          search_time: Math.round(searchTime)
-        })
-
-        if (e.message.includes('404')) {
-          logWarning('Player not found', {
-            nickname: this.nickname,
-            selectedGame: this.selectedGame
-          })
-          
-          this.$browser.notifications.create({
-            'type': 'basic',
-            'iconUrl': this.$browser.runtime.getURL('icons/icon_48.png'),
-            'title': 'Player not found.',
-            'message': `Nickname ${this.nickname} not found.`
-          })
-        } else {
-          // Отслеживаем API ошибки
-          this.$analytics.trackEvent('api_error_occurred', {
-            error_type: 'player_search',
-            error_message: e.message,
-            nickname: this.nickname
-          })
-
-          // Неожиданная ошибка при поиске игрока
-          logCriticalError(e, {
-            context: 'player_search',
-            nickname: this.nickname,
-            selectedGame: this.selectedGame
-          })
-        }
-
-        this.$emit('player-error')
-        console.error(e)
-      }
-
+    cancelRequests () {
+      this.profileRequestId++
+      this.searchRequestId++
+      clearTimeout(this.searchTimeoutId)
       this.loading = false
     },
-
+    async findPlayer ({ nickname = this.nickname } = {}) {
+      if (typeof nickname !== 'string' || nickname.trim().length < 2) return
+      let parsedNickname = nickname.trim()
+      if (parsedNickname.includes('faceit.com')) {
+        const match = parsedNickname.match(/players\/([^/?#]+)/)
+        if (!match) return
+        parsedNickname = decodeURIComponent(match[1])
+      }
+      this.cancelRequests()
+      const requestId = this.profileRequestId
+      const game = this.selectedGame
+      const isCurrent = () => requestId === this.profileRequestId && game === this.selectedGame
+      this.nickname = parsedNickname
+      this.loading = true
+      this.$emit('player-loading', { nickname: parsedNickname, game })
+      const start = performance.now()
+      this.$analytics.trackEvent('player_search_started', { nickname: parsedNickname, selected_game: game })
+      try {
+        const player = await faceitApi.getPlayer(parsedNickname, game)
+        if (!isCurrent()) return
+        let fullStats = null
+        let statsError = false
+        // No game data is a valid profile empty state, and needs no stats request.
+        if (player && (game !== 'ow2' || (player.games && player.games.ow2))) {
+          try {
+            fullStats = await faceitApi.getPlayerStats(player.player_id, game)
+          } catch (error) {
+            if (!isCurrent()) return
+            statsError = true
+            logCriticalError(error, { context: 'player_stats_loading', player_id: player.player_id, selectedGame: game })
+          }
+        }
+        if (!isCurrent()) return
+        this.$analytics.trackEvent('player_search_success', { nickname: parsedNickname, player_id: player && player.player_id, selected_game: game, has_stats: !!fullStats })
+        this.$analytics.trackTiming('api_response_time', Math.round(performance.now() - start))
+        logUserAction('player_found_successfully', { nickname: parsedNickname, hasStats: !!fullStats })
+        this.$emit('player-found', { player, fullStats, nickname: parsedNickname, game, statsError })
+      } catch (error) {
+        if (!isCurrent()) return
+        this.$analytics.trackEvent('player_search_failed', { nickname: parsedNickname, selected_game: game, error_message: error.message })
+        logWarning('Player search failed', { nickname: parsedNickname, selectedGame: game, error: error.message })
+        this.$emit('player-error', { game })
+      } finally {
+        if (isCurrent()) this.loading = false
+      }
+    },
     async onSearch (search) {
+      clearTimeout(this.searchTimeoutId)
+      const requestId = ++this.searchRequestId
+      const game = this.selectedGame
+      const isCurrent = () => requestId === this.searchRequestId && game === this.selectedGame
       this.noData = false
-
+      this.players = []
       if (search.length < this.searchLettersLimit) {
-        this.players = []
         this.loading = false
         return
       }
-
       this.loading = true
-
-      clearTimeout(this.searchTimeoutId)
       this.searchTimeoutId = setTimeout(async () => {
-        const searchStartTime = performance.now()
-        
         try {
-          const { items } = await faceitApi.searchPlayers(search, this.selectedGame, 5)
+          const { items } = await faceitApi.searchPlayers(search, game, 5)
+          if (!isCurrent()) return
           this.players = items || []
-
-          if (!this.players.length) {
-            this.noData = true
-          }
-          
-          // Отслеживаем автокомплит поиска
-          const searchTime = performance.now() - searchStartTime
-          this.$analytics.trackEvent('player_autocomplete_search', {
-            search_query: search,
-            result_count: this.players.length,
-            selected_game: this.selectedGame,
-            search_time: Math.round(searchTime)
-          })
-          
-          logUserAction('autocomplete_search_completed', {
-            search,
-            resultCount: this.players.length,
-            selectedGame: this.selectedGame
-          })
-        } catch (e) {
+          this.noData = !this.players.length
+          this.$analytics.trackEvent('player_autocomplete_search', { search_query: search, result_count: this.players.length, selected_game: game })
+        } catch (error) {
+          if (!isCurrent()) return
           this.players = []
           this.noData = true
-          
-          // Отслеживаем ошибку автокомплита
-          this.$analytics.trackEvent('autocomplete_search_failed', {
-            search_query: search,
-            error_message: e.message,
-            selected_game: this.selectedGame
-          })
-          
-          logWarning('Autocomplete search failed', {
-            search,
-            selectedGame: this.selectedGame,
-            error: e.message
-          })
+          logWarning('Autocomplete search failed', { search, selectedGame: game, error: error.message })
+        } finally {
+          if (isCurrent()) this.loading = false
         }
-
-        this.loading = false
       }, 500)
     },
 
     getPlayerSearchLvl (playerSearch) {
       const games = Array.isArray(playerSearch.games) ? playerSearch.games : []
-      const level = Number(games.find(i => i.name === this.selectedGame)?.skill_level)
-      return Number.isInteger(level) && level >= 1 && level <= 10 ? level : null
+      const level = games.find(i => i.name === this.selectedGame)?.skill_level
+      return validSkillLevel(level)
     },
 
     avatarOrDefault (avatar) {
