@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { chromium, type Route } from 'playwright'
+import { chromium, type Route, type Locator } from 'playwright'
 
 type Game = 'ow2' | 'cs2' | 'csgo'
 interface GameProfile { faceit_elo: number; skill_level: number; game_player_name?: string }
@@ -25,6 +25,7 @@ const context = await chromium.launchPersistentContext(profile, {
 })
 const results: CaseResult[] = []
 const pageErrors: string[] = []
+const vueErrors: string[] = []
 const apiCalls: string[] = []
 const unexpected: string[] = []
 let statsFailure = false
@@ -97,6 +98,13 @@ const page = await context.newPage()
 page.setDefaultTimeout(8000)
 page.setDefaultNavigationTimeout(15000)
 page.on('pageerror', error => pageErrors.push(error.message))
+page.on('console', message => {
+  const text = message.text()
+  if (message.type() === 'error' && /\[Vue|TypeError|ReferenceError/.test(text)) {
+    vueErrors.push(text.slice(0, 1000))
+    console.error('UI runtime error:', text.slice(0, 1000))
+  }
+})
 const popup = `chrome-extension://${extensionId}/popup/popup.html`
 async function eventually(check: () => Promise<void>, timeout = 12000) {
   const deadline = Date.now() + timeout
@@ -111,10 +119,19 @@ async function seed(game: Game, nickname = 'kevsteer') {
   await page.goto(popup, { waitUntil: 'load' })
   await page.evaluate(({ game, nickname }) => { localStorage.clear(); localStorage.setItem('selectedGame', game); localStorage.setItem('nickname', nickname) }, { game, nickname })
   await page.reload({ waitUntil: 'load' })
+  await page.bringToFront()
+}
+async function click(locator: Locator) {
+  await locator.waitFor({ state: 'visible' })
+  await page.bringToFront()
+  await locator.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }))
+  const box = await locator.boundingBox()
+  assert(box && box.width > 0 && box.height > 0, 'Clickable control must have visible bounds')
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
 }
 async function selectGame(game: Game) {
-  await page.locator('.selected-game').click({ noWaitAfter: true })
-  await page.locator(`.dropdown-item[data-game="${game}"]`).click({ noWaitAfter: true })
+  await click(page.locator('.selected-game'))
+  await click(page.locator(`.dropdown-item[data-game="${game}"]`))
 }
 async function screenshot(name: string) {
   if (process.env.SCREENSHOTS === '1') await page.screenshot({ path: path.join(evidence, name), fullPage: true })
@@ -132,14 +149,14 @@ try {
     assert(images.length >= 2 && images.every(img => img.loaded && !img.src.includes('skill_level_0_')), 'OW2 game and valid level assets must load')
     await writeFile(path.join(evidence, 'navigation-dom.html'), await page.locator('.tabs-wrapper').innerHTML())
     await screenshot('ow2-overview.png')
-    await page.locator('.tab-link').nth(1).click({ noWaitAfter: true })
+    await click(page.locator('.tab-link').nth(1))
     await textContains('.stat-row[data-stat="Matches"]', '792')
     await textContains('.stat-row[data-stat="Average Damage Dealt"]', '10821')
     await textContains('.stat-row[data-stat="Average Healing Done"]', '135.51')
     await textContains('.stat-row[data-stat="Matches with new stats"]', '614')
     assert(!/headshot/i.test(await page.locator('.overwatch-stats').innerText()), 'CS-only metrics must not leak into OW2')
     const map = snapshots[0].ow2!.stats!.segments[0]
-    await page.locator('.ow2-map-list a').first().click({ noWaitAfter: true })
+    await click(page.locator('.ow2-map-list a').first())
     await textContains('.overwatch-stats', map.label)
     await textContains('.stat-row[data-stat="Matches"]', map.stats.Matches)
     await screenshot('ow2-map.png')
@@ -147,12 +164,12 @@ try {
   await caseRun('OW2 match history and real competition/room links', async () => {
     await seed('ow2')
     await textContains('.ow2-elo', '2892')
-    await page.locator('.tab-link').nth(2).click({ noWaitAfter: true })
+    await click(page.locator('.tab-link').nth(2))
     await textContains('.match-history', snapshots[0].ow2!.history.items[0].competition_name)
     await eventually(async () => assert.equal(await page.locator('.match-card').count(), 10))
     assert(apiCalls.some(url => url.includes('history?game=ow2')), 'History must request ow2')
     const nextPage = page.waitForResponse(response => response.url().includes('history?game=ow2&offset=10') && response.status() === 200)
-    await page.locator('.load-more-btn').click({ noWaitAfter: true })
+    await click(page.locator('.load-more-btn'))
     await nextPage
     await eventually(async () => assert.equal(await page.locator('.match-history .loading-state').count(), 0))
     assert.equal(await page.locator('.match-card').count(), 10)
@@ -163,14 +180,14 @@ try {
   await caseRun('Game switch, persisted game and favorites use the selected game Elo', async () => {
     await seed('ow2')
     await textContains('.ow2-elo', '2892')
-    await page.locator('.favorite-btn').click({ noWaitAfter: true })
+    await click(page.locator('.favorite-btn'))
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('favoritePlayers') || '[]') as Array<{ game?: string; selectedGame?: string; game_id?: string; faceit_elo: number }>)
     assert.equal(stored[0].faceit_elo, 2892, 'Favorite must store OW2 Elo rather than CS Elo')
     assert([stored[0].game, stored[0].selectedGame, stored[0].game_id].includes('ow2'), 'Favorite must carry game identity')
     await selectGame('cs2')
     await eventually(async () => { assert.equal(await page.locator('.overwatch-stats').count(), 0); assert((await page.locator('body').innerText()).includes('2310'), 'CS2 Elo must display') })
-    await page.locator('.favorites-list-btn').click({ noWaitAfter: true })
-    await page.locator('.favorite-player-card .view-btn').click({ noWaitAfter: true })
+    await click(page.locator('.favorites-list-btn'))
+    await click(page.locator('.favorite-player-card .view-btn'))
     await textContains('.ow2-elo', '2892')
     await textContains('.selected-game', 'Overwatch 2')
     await page.reload({ waitUntil: 'load' })
@@ -182,7 +199,7 @@ try {
     await textContains('.ow2-elo', '625')
     await page.locator('.ow2-empty').waitFor()
     assert.equal(await page.locator('.ow2-stats-error').count(), 0)
-    await page.locator('.tab-link').nth(2).click({ noWaitAfter: true })
+    await click(page.locator('.tab-link').nth(2))
     await page.locator('.empty-matches').waitFor()
     assert.equal(await page.locator('.match-card').count(), 0)
   })
@@ -217,11 +234,11 @@ try {
     await seed('ow2')
     await textContains('.ow2-elo', '2892')
     const input = page.locator('.player-search input').first()
-    await input.click({ noWaitAfter: true })
+    await click(input)
     await input.fill('kev')
     await page.locator('.search-item').first().waitFor()
     assert.equal(await page.locator('.search-item .level-icon').count(), 0)
-    await page.locator('.search-item').filter({ hasText: 'Kev01Win' }).click({ noWaitAfter: true })
+    await click(page.locator('.search-item').filter({ hasText: 'Kev01Win' }))
     await textContains('.ow2-elo', '625')
   })
   await caseRun('Favorites navigation resumes interrupted load and changed game', async () => {
@@ -230,33 +247,33 @@ try {
     const pending = holdNext('stats', 'ow2')
     await selectGame('ow2')
     await Promise.race([pending.started, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('OW2 request was not held')), 10000))])
-    await page.locator('.favorites-list-btn').click({ noWaitAfter: true })
+    await click(page.locator('.favorites-list-btn'))
     pending.release()
-    await page.locator('.back-btn').click({ noWaitAfter: true })
+    await click(page.locator('.back-btn'))
     await textContains('.ow2-elo', '2892')
-    await page.locator('.favorites-list-btn').click({ noWaitAfter: true })
+    await click(page.locator('.favorites-list-btn'))
     await selectGame('cs2')
-    await page.locator('.back-btn').click({ noWaitAfter: true })
+    await click(page.locator('.back-btn'))
     await textContains('body', '2310')
-    await page.locator('.tab-link').nth(1).click({ noWaitAfter: true })
+    await click(page.locator('.tab-link').nth(1))
     await textContains('body', snapshots[0].cs2!.stats!.lifetime.Matches)
   })
   await caseRun('Same player favorites are independent per game and legacy entries restore CS:GO', async () => {
     await seed('ow2')
     await textContains('.ow2-elo', '2892')
-    await page.locator('.favorite-btn').click({ noWaitAfter: true })
+    await click(page.locator('.favorite-btn'))
     await selectGame('cs2')
     await textContains('body', '2310')
-    await page.locator('.favorite-btn').click({ noWaitAfter: true })
+    await click(page.locator('.favorite-btn'))
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('favoritePlayers') || '[]').length), 2)
-    await page.locator('.favorites-list-btn').click({ noWaitAfter: true })
+    await click(page.locator('.favorites-list-btn'))
     await eventually(async () => assert.equal(await page.locator('.favorite-player-card').count(), 2))
-    await page.locator('.favorite-player-card').filter({ hasText: 'Overwatch 2' }).locator('.remove-btn').click({ noWaitAfter: true })
+    await click(page.locator('.favorite-player-card').filter({ hasText: 'Overwatch 2' }).locator('.remove-btn'))
     const remaining = await page.evaluate(() => JSON.parse(localStorage.getItem('favoritePlayers') || '[]') as Array<{ game: string }>)
     assert.deepEqual(remaining.map(favorite => favorite.game), ['cs2'])
     await page.evaluate(player => { localStorage.setItem('favoritePlayers', JSON.stringify([{ player_id: player.player_id, nickname: player.nickname, faceit_elo: 2653, skill_level: 10 }])) }, snapshots[0].player)
     await page.reload({ waitUntil: 'load' })
-    await page.locator('.favorite-player-card .view-btn').click({ noWaitAfter: true })
+    await click(page.locator('.favorite-player-card .view-btn'))
     await textContains('.selected-game', 'CS:GO')
     await textContains('body', '2653')
   })
@@ -264,7 +281,7 @@ try {
     await seed('ow2')
     await textContains('.ow2-elo', '2892')
     const pending = holdNext('history', 'ow2')
-    await page.locator('.tab-link').nth(2).click({ noWaitAfter: true })
+    await click(page.locator('.tab-link').nth(2))
     await Promise.race([pending.started, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('History request was not held')), 10000))])
     await selectGame('cs2')
     await textContains('.match-history', snapshots[0].cs2!.history.items[0].competition_name)
@@ -279,21 +296,22 @@ try {
       await page.locator('.ow2-elo').waitFor({ timeout: 30000 })
       const elo = await page.locator('.ow2-elo').innerText()
       assert(/\d{3,}/.test(elo))
-      await page.locator('.tab-link').nth(1).click({ noWaitAfter: true })
+      await click(page.locator('.tab-link').nth(1))
       await page.locator('.ow2-stats-table').waitFor({ timeout: 30000 })
-      await page.locator('.tab-link').nth(2).click({ noWaitAfter: true })
+      await click(page.locator('.tab-link').nth(2))
       await page.locator('.match-card').first().waitFor({ timeout: 30000 })
       await screenshot('ow2-live.png')
     })
   }
   await caseRun('No unhandled page errors, unexpected API routes or visible advertisements', async () => {
     assert.deepEqual(pageErrors, [])
+    assert.deepEqual(vueErrors, [])
     assert.deepEqual(unexpected, [])
     assert.equal(await page.locator('iframe[src*="clash.gg"], img[src*="fFlMFLd"]').count(), 0)
   })
 } finally {
   releaseHeldRequest()
-  await writeFile(path.join(evidence, 'results.json'), JSON.stringify({ extensionId, cases: results, apiCalls, pageErrors, unexpected }, null, 2) + '\n')
+  await writeFile(path.join(evidence, 'results.json'), JSON.stringify({ extensionId, cases: results, apiCalls, pageErrors, vueErrors, unexpected }, null, 2) + '\n')
   await context.close()
 }
 if (results.some(result => result.status === 'failed')) process.exitCode = 1
