@@ -20,7 +20,7 @@ const fixtures = new Map(snapshots.map(snapshot => [snapshot.player.nickname.toL
 const profile = await mkdtemp(path.join(process.env.TMPDIR || evidence, 'ow2-profile-'))
 const extension = path.join(root, 'dist')
 const context = await chromium.launchPersistentContext(profile, {
-  channel: 'chromium', headless: true, viewport: { width: 400, height: 950 }, locale: 'en-US',
+  channel: 'chromium', headless: process.env.HEADED !== '1', viewport: { width: 400, height: 950 }, locale: 'en-US',
   args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--no-sandbox']
 })
 const results: CaseResult[] = []
@@ -121,7 +121,7 @@ async function screenshot(name: string) {
 }
 async function caseRun(name: string, run: () => Promise<void>) {
   try { await run(); results.push({ name, status: 'passed' }); console.log(`PASS ${name}`) }
-  catch (error) { const message = error instanceof Error ? error.stack || error.message : String(error); results.push({ name, status: 'failed', error: message }); console.error(`FAIL ${name}: ${message}`); await screenshot(`failure-${results.length}.png`).catch(() => {}) }
+  catch (error) { const message = error instanceof Error ? error.stack || error.message : String(error); results.push({ name, status: 'failed', error: message }); console.error(`FAIL ${name}: ${message}`); console.error('URL', page.url(), 'API', apiCalls.slice(-8)); await screenshot(`failure-${results.length}.png`).catch(() => {}) }
 }
 try {
   await caseRun('OW2 profile, exact FACEIT metrics, full stats, map route and local icons', async () => {
