@@ -74,7 +74,7 @@ export default {
       this.adImageHeight = remoteConfig.getString(this.configKey('ad_img_height'), '60px')
       this.adImageWidth = remoteConfig.getString(this.configKey('ad_img_width'), '300px')
       this.adImageHref = remoteConfig.getString(this.configKey('ad_img_href'), '')
-      this.adIframeSrc = remoteConfig.getString(this.configKey('ad_iframe_src'), 'https://clash.gg/embed-ad/Fort-Knox?initialWidth=340&initialHeight=100&redirect=https%3A%2F%2Ftrk.clash.gg%2Fclick%3Fo%3D2%26a%3D773%26c%3D161&winChance=0.99')
+      this.adIframeSrc = remoteConfig.getString(this.configKey('ad_iframe_src'), '')
       this.adIframeWidth = remoteConfig.getNumber(this.configKey('ad_iframe_width'), 340)
       this.adIframeHeight = remoteConfig.getNumber(this.configKey('ad_iframe_height'), 100)
 

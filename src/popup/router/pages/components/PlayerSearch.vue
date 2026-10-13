@@ -115,7 +115,12 @@ export default {
       if (parsedNickname.includes('faceit.com')) {
         const match = parsedNickname.match(/players\/([^/?#]+)/)
         if (!match) return
-        parsedNickname = decodeURIComponent(match[1])
+        parsedNickname = match[1]
+        try {
+          parsedNickname = decodeURIComponent(parsedNickname)
+        } catch (_) {
+          // Keep malformed encodings in the normal request and UI error flow.
+        }
       }
       this.cancelRequests()
       const requestId = this.profileRequestId

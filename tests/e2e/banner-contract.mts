@@ -46,3 +46,12 @@ test('Uninitialized config keeps both advertisements disabled', async () => {
     assert.equal(banner.hasAdvertisement, false)
   }
 })
+
+
+test('An explicitly empty iframe URL disables the enabled iframe slot', async () => {
+  const { banner, component, service } = await setup(true)
+  service.remoteConfig.remote.ad_type = 'iframe'
+  service.remoteConfig.remote.ad_iframe_src = ''
+  component.methods.loadAdvertisementData.call(banner)
+  assert.equal(banner.hasAdvertisement, false)
+})

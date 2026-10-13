@@ -241,7 +241,14 @@ try {
     await click(page.locator('.search-item').filter({ hasText: 'Kev01Win' }))
     await textContains('.ow2-elo', '625')
   })
-  await caseRun('Favorites navigation resumes interrupted load and changed game', async () => {
+  await caseRun('Malformed FACEIT URL encoding produces a handled search error', async () => {
+    await seed('ow2', 'https://www.faceit.com/en/players/foo%E0')
+    await page.locator('.overwatch-stats .loading-error').waitFor()
+    assert(apiCalls.some(url => url.includes('nickname=foo%25E0')), 'Malformed nickname must reach the normal encoded API error flow')
+    assert.deepEqual(pageErrors, [])
+    assert.deepEqual(vueErrors, [])
+  })
+  await caseRun('Favorites navigation resumes interrupted load and changed game' , async () => {
     await seed('cs2')
     await textContains('body', '2310')
     const pending = holdNext('stats', 'ow2')
