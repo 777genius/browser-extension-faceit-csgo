@@ -8,6 +8,7 @@
       <div class="favorite-container">
         <FavoriteButton
           :player="player"
+          :selected-game="selectedGame"
         />
       </div>
 

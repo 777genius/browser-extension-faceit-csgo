@@ -12,7 +12,7 @@
 
     <div class="content">
       <!-- Хедер с элементами управления -->
-      <AppHeader @game-selected="onGameSelected" />
+      <AppHeader :selected-game="selectedGame" @game-selected="onGameSelected" />
 
       <!-- Поле ввода игрока (скрывается на странице "Избранные игроки") -->
       <PlayerSearch
@@ -21,6 +21,7 @@
         :selected-game="selectedGame"
         :initial-nickname="nickname"
         @player-found="onPlayerFound"
+        @player-loading="onPlayerLoading"
         @player-error="onProfileError"
       />
 
@@ -31,7 +32,22 @@
       />
 
       <!-- VIEW -->
+      <OverwatchStats
+        v-if="selectedGame === 'ow2' && !['match-history', 'favorites'].includes($route.name)"
+        :player="player"
+        :nickname="nickname"
+        :full-stats="fullStats"
+        :local-storage-nickname="localStorageNickname"
+        :is-loading="isLoadingProfile"
+        :has-loading-error="hasLoadingError"
+        :stats-error="statsError"
+        @set-local-storage-nickname="setLocalStorageNickname"
+        @retry-loading="retryLoading"
+        @reset-to-search="resetToSearch"
+      />
       <router-view
+        v-else
+        :key="selectedGame + ':' + (player ? player.player_id : '')"
         :player="player"
         :nickname="nickname"
         :full-stats="fullStats"
@@ -46,6 +62,9 @@
       />
 
     </div>
+
+    <!-- Рекламный баннер внизу -->
+    <AdvertisementBanner suffix="_2" />
   </div>
 </template>
 
@@ -53,11 +72,13 @@
 import AnimatedTabs from './components/AnimatedTabs.vue'
 import AppHeader from './components/AppHeader.vue'
 import PlayerSearch from './components/PlayerSearch.vue'
-import { GAMES } from '../../utils/constants.js'
+import { normalizeGame } from '../../utils/gamePolicy.js'
+import OverwatchStats from './OverwatchStats.vue'
 import AdvertisementBanner from './components/AdvertisementBanner.vue'
 
 export default {
   components: {
+    OverwatchStats,
     AnimatedTabs,
     AppHeader,
     PlayerSearch,
@@ -74,10 +95,13 @@ export default {
       fullStats: null,
       defaultAvatar: 'https://cdn-frontend.faceit.com/web/54-1542827848/static/media/avatar_default_user_300x300.8befe042.jpg',
       localStorageNicknameData: validNickname,
-      selectedGame: localStorage.getItem('selectedGame') || GAMES.CSGO,
+      selectedGame: normalizeGame(localStorage.getItem('selectedGame')),
+      statsError: false,
       isLoadingProfile: false,
       hasLoadingError: false,
-      loadingTimeoutId: null
+      loadingTimeoutId: null,
+      profileNeedsReload: !!validNickname,
+      profileLoadTimer: null
     }
   },
   computed: {
@@ -126,22 +150,26 @@ export default {
       ]
     }
   },
-  async created () {
-    // if nickname was saved
-    if (this.nickname) {
-      // Показываем состояние загрузки для сохраненного игрока
-      this.startLoading()
-      
-      // Эмулируем поиск для сохраненного никнейма
-      this.$nextTick(() => {
-        this.$refs.playerSearch?.findPlayer({ nickname: this.nickname })
-      })
+  watch: {
+    '$route.name' (route, previousRoute) {
+      if (route === 'favorites') {
+        this.cancelQueuedProfileLoad()
+        if (this.isLoadingProfile) this.profileNeedsReload = true
+        this.$refs.playerSearch?.cancelRequests()
+        this.clearLoadingState()
+      } else if (previousRoute === 'favorites' && this.profileNeedsReload) {
+        this.scheduleProfileLoad()
+      }
     }
+  },
+  created () {
+    if (this.nickname) this.scheduleProfileLoad()
 
     // Слушаем событие поиска игрока из списка избранных
     this.$root.$on('search-player', this.searchPlayerFromFavorites)
   },
   beforeDestroy () {
+    this.cancelQueuedProfileLoad()
     // Убираем слушатель при уничтожении компонента
     this.$root.$off('search-player', this.searchPlayerFromFavorites)
     
@@ -151,38 +179,67 @@ export default {
     }
   },
   methods: {
+    cancelQueuedProfileLoad () {
+      clearTimeout(this.profileLoadTimer)
+      this.profileLoadTimer = null
+    },
+    scheduleProfileLoad () {
+      this.cancelQueuedProfileLoad()
+      if (!this.nickname || this.$route.name === 'favorites') return
+      // The next event-loop turn lets PlayerSearch remount and gives an explicit
+      // favorite selection priority over resuming the previous nickname.
+      this.profileLoadTimer = setTimeout(() => {
+        this.profileLoadTimer = null
+        if (this.$route.name !== 'favorites' && this.profileNeedsReload && this.nickname) {
+          this.$refs.playerSearch?.findPlayer({ nickname: this.nickname })
+        }
+      }, 0)
+    },
     setLocalStorageNickname (val) {
       this.localStorageNickname = val
     },
-    onGameSelected (game) {
-      const previousGame = this.selectedGame
+    onGameSelected (game, reload = true) {
+      game = normalizeGame(game)
+      if (this.selectedGame === game) return
       this.selectedGame = game
-
-      // Если игра изменилась и есть выбранный игрок, перезагружаем данные
-      if (previousGame !== game && this.player) {
-        this.startLoading()
-        // Пытаемся найти того же никнейма в новой игре
-        this.$refs.playerSearch?.findPlayer({ nickname: this.nickname })
-      }
+      localStorage.setItem('selectedGame', game)
+      this.cancelQueuedProfileLoad()
+      this.profileNeedsReload = !!this.nickname
+      this.player = null
+      this.fullStats = null
+      this.statsError = false
+      this.$refs.playerSearch?.cancelRequests()
+      if (this.$route.name === 'map-stats') this.$router.replace({ name: 'full-stats' })
+      if (reload) this.scheduleProfileLoad()
     },
-    onPlayerFound ({ player, fullStats, nickname }) {
-      // Останавливаем загрузку при успешном получении данных
+    onPlayerLoading ({ nickname, game }) {
+      if (game !== this.selectedGame) return
+      this.cancelQueuedProfileLoad()
+      this.profileNeedsReload = true
+      this.nickname = nickname
+      this.player = null
+      this.fullStats = null
+      this.statsError = false
+      this.startLoading()
+    },
+    onPlayerFound ({ player, fullStats, nickname, game, statsError }) {
+      if (game !== this.selectedGame) return
       this.clearLoadingState()
-      
+      this.profileNeedsReload = false
       this.player = player
       this.fullStats = fullStats
       this.nickname = nickname
-
-      // Если у игрока отсутствуют данные по выбранной игре,
-      // автоматически переключаемся на доступную игру (например, CS2).
-      const availableGames = Object.keys(this.player?.games || {})
-      if (availableGames.length && !this.player?.games?.[this.selectedGame]) {
-        const fallbackGame = availableGames.includes('csgo') ? 'csgo' : availableGames[0]
-        this.selectedGame = fallbackGame
-        localStorage.setItem('selectedGame', fallbackGame)
+      this.statsError = !!statsError
+      // Preserve the existing Counter-Strike migration fallback, with a refetch
+      // so profile, selected label and statistics all describe the same game.
+      const games = (player && player.games) || {}
+      if (game !== 'ow2' && !games[game]) {
+        const fallback = games.csgo ? 'csgo' : games.cs2 ? 'cs2' : null
+        if (fallback) this.onGameSelected(fallback)
       }
     },
     onProfileError () {
+      this.profileNeedsReload = false
       // При ошибке профиля показываем экран ошибки
       this.isLoadingProfile = false
       this.hasLoadingError = true
@@ -201,12 +258,14 @@ export default {
       }
       return avatar
     },
-    async searchPlayerFromFavorites (nickname) {
-      // Показываем загрузку при поиске из избранных
-      this.startLoading()
-      
-      // Устанавливаем никнейм и выполняем поиск через компонент PlayerSearch
+    async searchPlayerFromFavorites (favorite) {
+      this.cancelQueuedProfileLoad()
+      const nickname = typeof favorite === 'string' ? favorite : favorite.nickname
+      const game = typeof favorite === 'string' ? this.selectedGame : normalizeGame(favorite.game)
+      this.onGameSelected(game, false)
       this.nickname = nickname
+      this.profileNeedsReload = true
+      await this.$nextTick()
       this.$refs.playerSearch?.findPlayer({ nickname })
     },
     retryLoading () {
@@ -220,6 +279,9 @@ export default {
       }
     },
     resetToSearch () {
+      this.cancelQueuedProfileLoad()
+      this.profileNeedsReload = false
+      this.$refs.playerSearch?.cancelRequests()
       // Сбрасываем все состояния и возвращаемся к поиску
       this.clearLoadingState()
       this.player = null
@@ -228,6 +290,7 @@ export default {
       this.localStorageNickname = null
     },
     startLoading () {
+      if (this.loadingTimeoutId) clearTimeout(this.loadingTimeoutId)
       this.isLoadingProfile = true
       this.hasLoadingError = false
       

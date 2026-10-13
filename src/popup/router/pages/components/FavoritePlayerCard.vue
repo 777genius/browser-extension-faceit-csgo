@@ -20,16 +20,17 @@
           {{ player.nickname }}
         </div>
         <div
-          v-if="player.skill_level"
+          v-if="validLevel"
           class="player-level"
         >
           <img
-            :src="$browser.runtime.getURL(`assets/skill_level_${player.skill_level}_svg.svg`)"
+            :src="$browser.runtime.getURL(`assets/skill_level_${validLevel}_svg.svg`)"
             alt="level"
             class="level-icon"
           >
           <span class="elo-text">{{ player.faceit_elo || '?' }} ELO</span>
         </div>
+        <div class="favorite-game">{{ gameName }}</div>
         <div class="added-date">
           {{ formatAddedDate(player.added_at) }}
         </div>
@@ -58,6 +59,7 @@
 </template>
 
 <script>
+import { favoriteGame, favoriteKey, GAME_OPTIONS, validSkillLevel } from '../../../utils/gamePolicy.js'
 export default {
   name: 'FavoritePlayerCard',
   props: {
@@ -70,6 +72,10 @@ export default {
     return {
       defaultAvatar: 'https://cdn-frontend.faceit.com/web/54-1542827848/static/media/avatar_default_user_300x300.8befe042.jpg'
     }
+  },
+  computed: {
+    validLevel () { return validSkillLevel(this.player.skill_level) },
+    gameName () { return GAME_OPTIONS.find(game => game.value === favoriteGame(this.player)).name }
   },
   methods: {
     avatarOrDefault (avatar) {
@@ -104,11 +110,11 @@ export default {
     },
 
     viewStats () {
-      this.$emit('view-stats', this.player.nickname)
+      this.$emit('view-stats', { ...this.player, game: favoriteGame(this.player) })
     },
 
     removeFromFavorites () {
-      this.$emit('remove-favorite', this.player.player_id)
+      this.$emit('remove-favorite', favoriteKey(this.player))
     }
   }
 }

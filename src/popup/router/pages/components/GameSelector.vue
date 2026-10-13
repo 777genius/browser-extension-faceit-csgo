@@ -1,6 +1,8 @@
 <template>
   <div class="game-selector">
-    <div
+    <button
+      type="button"
+      :aria-expanded="isOpen"
       class="selected-game"
       @click="toggleDropdown"
     >
@@ -14,7 +16,7 @@
         class="fas fa-chevron-down"
         :class="{ 'rotated': isOpen }"
       />
-    </div>
+    </button>
 
     <div
       v-if="isOpen"
@@ -23,6 +25,7 @@
       <div
         v-for="game in games"
         :key="game.value"
+        :data-game="game.value"
         class="dropdown-item"
         :class="{ 'active': selectedGame === game.value }"
         @click="selectGame(game.value)"
@@ -39,27 +42,15 @@
 </template>
 
 <script>
-import { GAMES } from '../../../utils/constants.js'
+import { GAME_OPTIONS } from '../../../utils/gamePolicy.js'
 
 export default {
   name: 'GameSelector',
+  props: {
+    selectedGame: { type: String, default: 'csgo' }
+  },
   data () {
-    return {
-      selectedGame: localStorage.getItem('selectedGame') || GAMES.CSGO,
-      isOpen: false,
-      games: [
-        {
-          value: 'csgo',
-          name: 'CS:GO',
-          image: 'https://assets.faceit-cdn.net/third_party/games/4f899245-2fa8-4e52-ad9a-4a363613c19e/assets/details/csgo_flag_s_1589795160776.jpg'
-        },
-        {
-          value: 'cs2',
-          name: 'CS2',
-          image: 'https://distribution.faceit-cdn.net/images/ea5c4171-712f-4afd-a8ae-3fb5e1e2afb8.jpeg?width=24&height=24'
-        }
-      ]
-    }
+    return { isOpen: false, games: GAME_OPTIONS }
   },
   computed: {
     selectedGameData () {
@@ -67,9 +58,6 @@ export default {
     }
   },
   mounted () {
-    // Эмитируем начальное значение игры
-    this.$emit('game-selected', this.selectedGame)
-
     // Закрываем dropdown при клике вне компонента
     document.addEventListener('click', this.handleOutsideClick)
   },
@@ -81,11 +69,7 @@ export default {
       this.isOpen = !this.isOpen
     },
     selectGame (gameValue) {
-      this.selectedGame = gameValue
       this.isOpen = false
-
-      // Сохраняем выбор локально
-      localStorage.setItem('selectedGame', gameValue)
 
       // Эмитируем событие изменения игры
       this.$emit('game-selected', gameValue)

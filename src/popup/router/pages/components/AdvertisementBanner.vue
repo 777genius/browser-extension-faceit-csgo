@@ -2,9 +2,21 @@
   <div
     v-if="hasAdvertisement"
     class="advertisement-banner"
-    @click="openAdvertisementLink"
+    :class="{ 'advertisement-banner--interactive': adType === 'image' }"
+    @click="adType === 'image' ? openAdvertisementLink() : null"
   >
+    <iframe
+      v-if="adType === 'iframe'"
+      :src="adIframeSrc"
+      :width="adIframeWidth"
+      :height="adIframeHeight"
+      frameborder="0"
+      allow="autoplay"
+      title="Advertisement"
+      class="advertisement-banner__iframe"
+    />
     <img
+      v-else
       :src="adImageSrc"
       :alt="'Advertisement'"
       :style="{
@@ -21,47 +33,71 @@ import remoteConfig from '../../../services/remoteConfig.js'
 
 export default {
   name: 'AdvertisementBanner',
+  props: {
+    suffix: {
+      type: String,
+      default: ''
+    }
+  },
   data() {
     return {
       adImageSrc: '',
-      adImageHeight: 60,
-      adImageWidth: 300,
+      adImageHeight: '60px',
+      adImageWidth: '300px',
       adImageHref: '',
+      adType: 'image',
+      adIframeSrc: '',
+      adIframeWidth: 300,
+      adIframeHeight: 100,
       hasAdvertisement: false
     }
   },
   async created() {
-    // Инициализируем Remote Config и загружаем значения рекламы
     try {
       await remoteConfig.initialize()
       await remoteConfig.fetchConfig()
-      this.loadAdvertisementData()
     } catch (error) {
       console.error('Failed to initialize Remote Config in AdvertisementBanner:', error)
-      // Используем дефолтные значения при ошибке
-      this.hasAdvertisement = false
     }
+    this.loadAdvertisementData()
   },
   methods: {
+    configKey(key) {
+      return this.suffix ? `${key}${this.suffix}` : key
+    },
     loadAdvertisementData() {
-      // Загружаем данные рекламы из Remote Config
-      this.hasAdvertisement = remoteConfig.getBoolean('ad_enabled', false)
-      this.adImageSrc = remoteConfig.getString('ad_img_src', '')
-      this.adImageHeight = remoteConfig.getString('ad_img_height', '60px')
-      this.adImageWidth = remoteConfig.getString('ad_img_width', '300px')
-      this.adImageHref = remoteConfig.getString('ad_img_href', '')
-      
-      if (this.hasAdvertisement) {
-        console.log('🖼️ Advertisement banner loaded:', {
-          src: this.adImageSrc,
-          width: this.adImageWidth,
-          height: this.adImageHeight,
-          href: this.adImageHref
+      const s = this.suffix
+
+      this.hasAdvertisement = remoteConfig.getBoolean(this.configKey('ad_enabled'), false)
+      this.adType = remoteConfig.getString(this.configKey('ad_type'), 'image')
+      this.adImageSrc = remoteConfig.getString(this.configKey('ad_img_src'), '')
+      this.adImageHeight = remoteConfig.getString(this.configKey('ad_img_height'), '60px')
+      this.adImageWidth = remoteConfig.getString(this.configKey('ad_img_width'), '300px')
+      this.adImageHref = remoteConfig.getString(this.configKey('ad_img_href'), '')
+      this.adIframeSrc = remoteConfig.getString(this.configKey('ad_iframe_src'), '')
+      this.adIframeWidth = remoteConfig.getNumber(this.configKey('ad_iframe_width'), 340)
+      this.adIframeHeight = remoteConfig.getNumber(this.configKey('ad_iframe_height'), 100)
+
+      if (!['image', 'iframe'].includes(this.adType)) {
+        this.adType = 'image'
+      }
+
+      if (this.adType === 'iframe' && !this.adIframeSrc.trim()) {
+        this.hasAdvertisement = false
+      }
+      if (this.adType === 'image' && !this.adImageSrc.trim()) {
+        this.hasAdvertisement = false
+      }
+
+      if (this.hasAdvertisement && this.$analytics) {
+        this.$analytics.trackEvent('advertisement_impression', {
+          ad_type: this.adType,
+          ad_suffix: this.suffix || 'primary',
+          timestamp: new Date().toISOString()
         })
       }
     },
     async refreshAdvertisement() {
-      // Метод для обновления рекламных данных
       try {
         await remoteConfig.fetchConfig()
         this.loadAdvertisementData()
@@ -70,18 +106,15 @@ export default {
       }
     },
     openAdvertisementLink() {
-      // Открываем рекламную ссылку в новой вкладке
       if (this.adImageHref && this.adImageHref.trim()) {
-        // Отслеживаем клик по рекламе
         if (this.$analytics) {
           this.$analytics.trackEvent('advertisement_clicked', {
             ad_url: this.adImageHref,
             ad_src: this.adImageSrc,
+            ad_suffix: this.suffix || 'primary',
             timestamp: new Date().toISOString()
           })
         }
-        
-        // Открываем ссылку в новой вкладке
         window.open(this.adImageHref, '_blank')
       }
     }
@@ -96,18 +129,27 @@ export default {
   justify-content: center;
   align-items: center;
   background: rgba(0, 0, 0, 0.8);
-  cursor: pointer;
   transition: all 0.3s ease;
 
-  &:hover {
-    background: rgba(0, 0, 0, 0.9);
-    border-color: rgba(245, 85, 0, 0.5);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  &--interactive {
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.9);
+      border-color: rgba(245, 85, 0, 0.5);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
   }
 
   img {
     max-width: 100%;
   }
+
+  &__iframe {
+    display: block;
+    border: none;
+    max-width: 100%;
+  }
 }
-</style> 
+</style>

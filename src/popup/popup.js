@@ -13,6 +13,7 @@ import VueSelect from 'vue-cool-select'
 import browser from 'webextension-polyfill'
 import { initSentry, logCriticalError } from './services/sentry.js'
 import analyticsService from './services/analytics.js'
+import { createTrackedFetch } from './utils/trackedFetch.js'
 
 // Импортируем английские сообщения для принудительного использования английского языка
 // import enMessages from '../_locales/en/messages.json'
@@ -117,33 +118,7 @@ window.addEventListener('error', event => {
 
 // Отслеживание сетевых ошибок через перехват fetch
 const originalFetch = window.fetch
-window.fetch = async function(...args) {
-    try {
-        const response = await originalFetch.apply(this, args)
-
-        // Отслеживаем неуспешные HTTP запросы
-        if (!response.ok) {
-            analyticsService.trackEvent('network_error', {
-                url: args[0],
-                status: response.status,
-                status_text: response.statusText,
-                error_type: 'http_error'
-            })
-        }
-
-        return response
-    } catch (error) {
-        // Отслеживаем сетевые ошибки (отсутствие соединения и т.д.)
-        analyticsService.trackError(`Network Error: ${error.message}`, false)
-        analyticsService.trackEvent('network_error', {
-            url: args[0],
-            error_type: 'fetch_error',
-            error_message: error.message
-        })
-
-        throw error
-    }
-}
+window.fetch = createTrackedFetch(originalFetch, analyticsService)
 
 // Проверяем обновления расширения
 if (chrome.runtime.onInstalled) {

@@ -1,5 +1,8 @@
 <template>
   <div v-if="player">
+    <p v-if="selectedGame === 'ow2'" class="source-note">{{ $browser.i18n.getMessage('ow2Source') || 'FACEIT Overwatch 2 statistics. FACEIT Elo is separate from Blizzard competitive rank.' }}</p>
+    <div v-if="selectedGame === 'ow2' && !gameProfile" class="ow2-empty">{{ $browser.i18n.getMessage('ow2NoGame') || 'This player has no Overwatch 2 profile on FACEIT.' }}</div>
+    <template v-else>
     <!-- Recent Results Summary -->
     <div class="results-summary">
       <h3>{{ $browser.i18n.getMessage('recentResults') }}</h3>
@@ -32,6 +35,11 @@
       >
         <div class="spinner" />
         <p>{{ $browser.i18n.getMessage('loadingMatches') || 'Загрузка матчей...' }}</p>
+      </div>
+
+      <div v-else-if="matchesError" class="matches-error" role="alert">
+        <p>{{ $browser.i18n.getMessage('loadingErrorDescription') || 'Could not load matches. Check your connection and retry.' }}</p>
+        <button @click="resetAndLoad">{{ $browser.i18n.getMessage('retry') || 'Retry' }}</button>
       </div>
 
       <!-- Matches list -->
@@ -72,6 +80,7 @@
         <span v-else>{{ $browser.i18n.getMessage('loadMoreMatches') }}</span>
       </button>
     </div>
+    </template>
   </div>
 
   <!-- Состояния когда игрок не загружен -->
@@ -104,9 +113,11 @@ import MatchCard from './components/MatchCard.vue'
 import EmptyState from './components/EmptyState.vue'
 import LoadingState from './components/LoadingState.vue'
 import LoadingError from './components/LoadingError.vue'
+import { API_LIMITS } from '../../utils/constants.js'
+import { getGameProfile } from '../../utils/gamePolicy.js'
 import { faceitApi } from '../../services/faceitApi.js'
 import { getMatchResult, getMatchResultLetter, findPlayerTeam } from '../../utils/matchUtils.js'
-import { logWarning, logUserAction, logCriticalError } from '../../services/sentry.js'
+import { logCriticalError } from '../../services/sentry.js'
 
 export default {
   components: {
@@ -145,6 +156,8 @@ export default {
   data () {
     return {
       matches: [],
+      requestId: 0,
+      matchesError: false,
       loadingMatches: false,
       loadingMore: false,
       offset: 0,
@@ -154,6 +167,7 @@ export default {
     }
   },
   computed: {
+    gameProfile () { return getGameProfile(this.player, this.selectedGame) },
     recentResults () {
       return this.fullStats?.lifetime?.['Recent Results'] || []
     },
@@ -161,7 +175,7 @@ export default {
       return this.matches.slice(0, 5)
     },
     isLoadingMatches () {
-      return this.loadingMatches || (this.matches.length === 0 && this.currentPage === 0 && this.hasMore)
+      return this.loadingMatches
     }
   },
   watch: {
@@ -182,11 +196,8 @@ export default {
       }
     }
   },
-  async created () {
-    if (this.player?.player_id) {
-      await this.loadMatches()
-      this.handleHighlightFromQuery()
-    }
+  beforeDestroy () {
+    this.requestId++
   },
   async mounted () {
     // Отслеживаем просмотр истории матчей
@@ -201,94 +212,42 @@ export default {
   },
   methods: {
     async loadMatches () {
-      if (this.loadingMatches || !this.hasMore) return
-
+      if (this.loadingMatches || !this.hasMore || !this.player?.player_id) return
+      if (this.selectedGame === 'ow2' && !this.gameProfile) return
+      const requestId = this.requestId
+      const playerId = this.player.player_id
+      const game = this.selectedGame
+      const isCurrent = () => requestId === this.requestId && playerId === this.player?.player_id && game === this.selectedGame
       this.loadingMatches = true
-      const startTime = performance.now()
-
+      this.matchesError = false
       try {
-        const response = await faceitApi.getPlayerMatches(this.player.player_id, this.selectedGame, this.currentPage)
+        const response = await faceitApi.getPlayerMatches(playerId, game, this.offset, API_LIMITS.MATCHES_PER_PAGE)
+        if (!isCurrent()) return
         const newMatches = response.items || []
-
-        if (newMatches.length === 0) {
-          this.hasMore = false
-          
-          // Отслеживаем отсутствие матчей
-          this.$analytics.trackEvent('match_history_empty', {
-            player_id: this.player.player_id,
-            selected_game: this.selectedGame,
-            page: this.currentPage
-          })
-        } else {
-          // Фильтруем дубликаты перед добавлением
-          const existingMatchIds = new Set(this.matches.map(m => m.match_id))
-          const uniqueNewMatches = newMatches.filter(match => !existingMatchIds.has(match.match_id))
-          
-          if (uniqueNewMatches.length > 0) {
-            this.matches.push(...uniqueNewMatches)
-            console.log(`Added ${uniqueNewMatches.length} unique matches out of ${newMatches.length} received`)
-          }
-          
-          this.currentPage++
-
-          // Отслеживаем успешную загрузку матчей
-          const loadTime = performance.now() - startTime
-          this.$analytics.trackTiming('api_response_time', Math.round(loadTime))
-          this.$analytics.trackEvent('match_history_loaded', {
-            player_id: this.player.player_id,
-            matches_count: newMatches.length,
-            total_matches: this.matches.length,
-            page: this.currentPage - 1
-          })
-
-          // Проверяем есть ли еще матчи для загрузки
-          if (newMatches.length < 20) {
-            this.hasMore = false
-          }
-        }
+        const existingIds = new Set(this.matches.map(match => match.match_id))
+        this.matches.push(...newMatches.filter(match => !existingIds.has(match.match_id)))
+        this.offset += newMatches.length
+        this.currentPage++
+        this.hasMore = newMatches.length === API_LIMITS.MATCHES_PER_PAGE
+        this.$analytics.trackEvent('match_history_loaded', { player_id: playerId, selected_game: game, matches_count: newMatches.length })
       } catch (error) {
-        console.error('Error loading matches:', error)
+        if (!isCurrent()) return
+        this.matchesError = true
         this.hasMore = false
-        
-        // Отслеживаем ошибку загрузки матчей
-        this.$analytics.trackError(`Match history load failed: ${error.message}`, false)
-        this.$analytics.trackEvent('data_load_failed', {
-          error_type: 'match_history',
-          player_id: this.player.player_id,
-          error_message: error.message
-        })
-        
-        // Логируем ошибку загрузки матчей
-        if (error.message.includes('404')) {
-          logWarning('Matches not found for player', {
-            player_id: this.player.player_id,
-            selectedGame: this.selectedGame,
-            page: this.currentPage
-          })
-        } else {
-          logCriticalError(error, {
-            context: 'match_history_loading',
-            player_id: this.player.player_id,
-            selectedGame: this.selectedGame,
-            page: this.currentPage
-          })
-        }
+        logCriticalError(error, { context: 'match_history_loading', player_id: playerId, selectedGame: game })
+      } finally {
+        if (isCurrent()) this.loadingMatches = false
       }
-
-      this.loadingMatches = false
     },
     async resetAndLoad () {
-      logUserAction('reset_match_history', {
-        player_id: this.player?.player_id,
-        selectedGame: this.selectedGame
-      })
-      
+      this.requestId++
       this.matches = []
+      this.offset = 0
       this.currentPage = 0
       this.hasMore = true
+      this.matchesError = false
       this.loadingMatches = false
       await this.loadMatches()
-      // Применяем подсветку после загрузки новых матчей
       this.handleHighlightFromQuery()
     },
     getMatchResult (match) {

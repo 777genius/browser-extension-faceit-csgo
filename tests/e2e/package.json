@@ -1,0 +1,14 @@
+{
+  "name": "faceit-extension-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node overwatch2.mts"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0",
+    "typescript": "7.0.2",
+    "@types/node": "26.6.4"
+  }
+}

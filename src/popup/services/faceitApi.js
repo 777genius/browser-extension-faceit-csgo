@@ -124,7 +124,7 @@ class FaceitApiService {
     async getPlayer(nickname, game = GAMES.CSGO) {
         logUserAction('search_player', { nickname, game })
 
-        const url = `${this.baseUrl}/players?nickname=${nickname}&game=${game}`
+        const url = `${this.baseUrl}/players?nickname=${encodeURIComponent(nickname)}&game=${game}`
         return await this.request(url)
     }
 
@@ -172,7 +172,7 @@ class FaceitApiService {
     async searchPlayers(nickname, game = GAMES.CSGO, limit = 5) {
         logUserAction('search_players_autocomplete', { nickname, game, limit })
 
-        const url = `${this.baseUrl}/search/players?nickname=${nickname}&game=${game}&offset=0&limit=${limit}`
+        const url = `${this.baseUrl}/search/players?nickname=${encodeURIComponent(nickname)}&game=${game}&offset=0&limit=${limit}`
         return await this.request(url)
     }
 
