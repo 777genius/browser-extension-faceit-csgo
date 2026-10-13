@@ -68,8 +68,8 @@ export default {
     loadAdvertisementData() {
       const s = this.suffix
 
-      this.hasAdvertisement = remoteConfig.getBoolean(this.configKey('ad_enabled'), true)
-      this.adType = remoteConfig.getString(this.configKey('ad_type'), 'iframe')
+      this.hasAdvertisement = remoteConfig.getBoolean(this.configKey('ad_enabled'), false)
+      this.adType = remoteConfig.getString(this.configKey('ad_type'), 'image')
       this.adImageSrc = remoteConfig.getString(this.configKey('ad_img_src'), '')
       this.adImageHeight = remoteConfig.getString(this.configKey('ad_img_height'), '60px')
       this.adImageWidth = remoteConfig.getString(this.configKey('ad_img_width'), '300px')
